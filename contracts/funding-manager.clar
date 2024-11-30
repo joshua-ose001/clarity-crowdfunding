@@ -152,3 +152,17 @@
 (ok (if (>= (var-get total-contributed) (var-get funding-goal))
       u0
       (- (var-get funding-goal) (var-get total-contributed)))))
+
+;; Verifies that the funding goal is not met and the user has made contributions.
+(define-read-only (is-refund-eligible (user principal))
+(ok (and (< (var-get total-contributed) (var-get funding-goal)) ;; Goal not met
+         (> (default-to u0 (map-get? user-contributions user)) u0)))) ;; User contributed
+
+;; Get Campaign Summary
+(define-read-only (get-campaign-summary)
+(ok {
+  funding-goal: (var-get funding-goal),
+  total-contributed: (var-get total-contributed),
+  minimum-contribution: (var-get minimum-contribution),
+  funding-status: (var-get funding-status)
+}))
