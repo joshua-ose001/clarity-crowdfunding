@@ -108,3 +108,47 @@
     (asserts! (> excess u0) (err u206)) ;; Ensure there are excess funds
     (var-set total-contributed (var-get funding-goal)) ;; Update total to funding goal
     (ok excess))))
+
+;; Allows users to reset their contribution during an ongoing campaign
+(define-public (reset-contribution)
+  (let (
+    (user-contribution (default-to u0 (map-get? user-contributions tx-sender))))
+    (asserts! (is-eq (var-get funding-status) u1) err-funding-closed) ;; Ensure funding is open
+    (asserts! (> user-contribution u0) err-refund-failure) ;; Ensure user has a contribution
+
+    ;; Reset user's contribution and adjust total contributions
+    (map-set user-contributions tx-sender u0)
+    (var-set total-contributed (- (var-get total-contributed) user-contribution))
+    (ok true)))
+
+
+;; ------------------- READ-ONLY FUNCTIONS ----------------
+;; Check if the funding goal has been met
+(define-read-only (is-goal-met)
+  (ok (>= (var-get total-contributed) (var-get funding-goal))))
+
+;; Get the contribution amount for a specific user
+(define-read-only (get-user-contribution (user principal))
+  (ok (default-to u0 (map-get? user-contributions user))))
+
+;; Get the total contributions made
+(define-read-only (get-total-contributions)
+  (ok (var-get total-contributed)))
+
+;; Get the funding goal
+(define-read-only (get-funding-goal)
+  (ok (var-get funding-goal)))
+
+;; Get the funding status (0 = Closed, 1 = Open)
+(define-read-only (get-funding-status)
+  (ok (var-get funding-status)))
+
+;; Get the minimum contribution amount
+(define-read-only (get-minimum-contribution)
+  (ok (var-get minimum-contribution)))
+
+;; Get the amount still needed to meet the funding goal.
+(define-read-only (get-remaining-goal)
+(ok (if (>= (var-get total-contributed) (var-get funding-goal))
+      u0
+      (- (var-get funding-goal) (var-get total-contributed)))))
