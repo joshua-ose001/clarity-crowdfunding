@@ -166,3 +166,45 @@
   minimum-contribution: (var-get minimum-contribution),
   funding-status: (var-get funding-status)
 }))
+
+;; Calculate Potential Contribution Impact 
+(define-read-only (calculate-contribution-impact (amount uint))
+(ok (if (<= (+ (var-get total-contributed) amount) (var-get funding-goal))
+      (- (var-get funding-goal) (+ (var-get total-contributed) amount))
+      u0)))
+
+;; Get the percentage of the funding goal achieved
+(define-read-only (get-contribution-percentage)
+  (ok (if (> (var-get funding-goal) u0)
+          (/ (* (var-get total-contributed) u100) (var-get funding-goal))
+          u0)))
+
+;; Check if a user is eligible to contribute
+(define-read-only (is-contribution-eligible (user principal) (amount uint))
+  (ok (and 
+        (is-eq (var-get funding-status) u1) ;; Funding is open
+        (> amount (var-get minimum-contribution)) ;; Meets minimum contribution
+        (<= (+ (default-to u0 (map-get? user-contributions user)) amount) (var-get funding-goal))))) ;; Within goal limit
+
+;; Verifies if a given user is the contract owner
+(define-read-only (is-owner (user principal))
+  (ok (is-eq user contract-owner)))
+
+;; Gets the rank of a user's contribution in comparison to other contributors
+(define-read-only (get-contribution-ranking (user principal))
+  (let ((user-contribution (default-to u0 (map-get? user-contributions user))))
+    (ok (if (> user-contribution u0)
+            (/ (* user-contribution u100) (var-get total-contributed))
+            u0))))
+
+;; Gets the remaining contribution capacity for a user
+(define-read-only (get-contribution-capacity (user principal))
+  (let (
+    (current-contribution (default-to u0 (map-get? user-contributions user)))
+    (remaining-capacity (if (> (var-get total-contributed) (var-get funding-goal))
+                             u0
+                             (- (var-get funding-goal) (var-get total-contributed)))))
+  (ok (if (>= remaining-capacity current-contribution)
+          (- remaining-capacity current-contribution)
+          u0))))
+
