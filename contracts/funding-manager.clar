@@ -1,6 +1,12 @@
 ;; Contract Name: crowdfunding-manager.clar
 ;; Description: This Clarity smart contract facilitates a crowdfunding campaign,
 ;; allowing users to contribute funds towards a specified funding goal. The contract
+;; is controlled by an owner who can set the funding goal, start or end the campaign,
+;; and manage the state of contributions. It ensures that contributions meet a minimum
+;; threshold and that the total contributions do not exceed the funding goal. Users
+;; can also request refunds if the funding goal is not met. The contract tracks each
+;; user's contribution and provides functions to check the funding status, goal, and
+;; individual contributions.
 
 ;; ---------------------- CONSTANTS ----------------------
 ;; Define constants for ownership and error handling
@@ -27,3 +33,78 @@
 ;; Calculate the refund amount for a user
 (define-private (calculate-refund (contributed-amount uint))
   (* contributed-amount (var-get funding-status)))
+
+;; Validate if a contribution is valid
+(define-private (is-valid-contribution (contribution uint))
+  (and 
+    (> contribution (var-get minimum-contribution)) ;; Ensure contribution exceeds the minimum
+    (is-eq (var-get funding-status) u0) ;; Check funding is closed
+    (<= (+ (var-get total-contributed) contribution) (var-get funding-goal)))) ;; Check if goal is not exceeded
+
+;; ------------------- PUBLIC FUNCTIONS ------------------
+;; Set the funding goal (restricted to contract owner)
+(define-public (set-funding-goal (goal uint))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-not-owner) ;; Ensure caller is contract owner
+    (asserts! (> goal u0) err-invalid-contribution) ;; Goal must be positive
+    (var-set funding-goal goal) ;; Update funding goal
+    (ok true)))
+
+;; Start the funding campaign (restricted to contract owner)
+(define-public (start-funding)
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-not-owner) ;; Ensure caller is contract owner
+    (var-set funding-status u1) ;; Set funding status to open
+    (ok true)))
+
+;; End the funding campaign (restricted to contract owner)
+(define-public (end-funding)
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-not-owner) ;; Ensure caller is contract owner
+    (var-set funding-status u0) ;; Set funding status to closed
+    (ok true)))
+
+;; Allow users to contribute to the funding campaign
+(define-public (contribute (amount uint))
+  (let (
+    (current-contribution (default-to u0 (map-get? user-contributions tx-sender))) ;; Fetch current user's contribution
+  )
+    (asserts! (is-valid-contribution amount) err-invalid-contribution) ;; Validate contribution
+    (map-set user-contributions tx-sender (+ current-contribution amount)) ;; Update user's contribution
+    (var-set total-contributed (+ (var-get total-contributed) amount)) ;; Update total contributions
+    (ok true)))
+
+;; Refund users if funding goal is not met
+(define-public (refund)
+  (let (
+    (user-contribution (default-to u0 (map-get? user-contributions tx-sender))) ;; Fetch user's contribution
+    (contract-balance (var-get total-contributed)) ;; Fetch contract's total balance
+  )
+    (asserts! (<= contract-balance (var-get funding-goal)) err-funding-closed) ;; Ensure goal is not met
+    (asserts! (> user-contribution u0) err-refund-failure) ;; Ensure user has a contribution
+
+    ;; Reset user's contribution and adjust total contributed
+    (map-set user-contributions tx-sender u0)
+    (var-set total-contributed (- contract-balance user-contribution))
+
+    ;; Issue refund
+    (ok user-contribution)))
+
+;; Allows the contract owner to update the minimum contribution amount for the campaign
+(define-public (set-minimum-contribution (new-minimum uint))
+(begin
+  (asserts! (is-eq tx-sender contract-owner) err-not-owner) ;; Ensure caller is contract owner
+  (asserts! (> new-minimum u0) err-invalid-contribution) ;; Minimum must be positive
+  (var-set minimum-contribution new-minimum) ;; Update minimum contribution
+  (ok true)))
+
+;;  Withdraw Excess Funds 
+(define-public (withdraw-excess-funds)
+(begin
+  (asserts! (is-eq tx-sender contract-owner) err-not-owner) ;; Only the owner can withdraw
+  (let ((excess (if (> (var-get total-contributed) (var-get funding-goal))
+                    (- (var-get total-contributed) (var-get funding-goal))
+                    u0)))
+    (asserts! (> excess u0) (err u206)) ;; Ensure there are excess funds
+    (var-set total-contributed (var-get funding-goal)) ;; Update total to funding goal
+    (ok excess))))
