@@ -121,6 +121,24 @@
     (var-set total-contributed (- (var-get total-contributed) user-contribution))
     (ok true)))
 
+;; Allows a user to withdraw their contribution during an active campaign
+(define-public (withdraw-contribution)
+  (let ((user-contribution (default-to u0 (map-get? user-contributions tx-sender))))
+    (begin
+      (asserts! (is-eq (var-get funding-status) u1) err-funding-closed) ;; Funding must be open
+      (asserts! (> user-contribution u0) err-refund-failure) ;; User must have contributed
+      (map-set user-contributions tx-sender u0) ;; Reset user's contribution
+      (var-set total-contributed (- (var-get total-contributed) user-contribution)) ;; Adjust total contributions
+      (ok user-contribution))))
+
+;; Allows the owner to close the campaign early and refund all users if necessary.
+(define-public (close-campaign-early)
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-not-owner) ;; Ensure caller is owner
+    (asserts! (is-eq (var-get funding-status) u1) err-funding-closed) ;; Campaign must be active
+    (var-set funding-status u0) ;; Mark campaign as closed
+    (ok true)))
+
 
 ;; ------------------- READ-ONLY FUNCTIONS ----------------
 ;; Check if the funding goal has been met
@@ -208,3 +226,24 @@
           (- remaining-capacity current-contribution)
           u0))))
 
+;; Checks how much more a user needs to contribute to help meet the funding goal
+(define-read-only (get-user-contribution-balance (user principal))
+  (let ((user-contribution (default-to u0 (map-get? user-contributions user))))
+    (ok (if (>= (+ user-contribution (var-get total-contributed)) (var-get funding-goal))
+            u0
+            (- (var-get funding-goal) (+ user-contribution (var-get total-contributed)))))))
+
+;; Gets the percentage of total contributions made by a specific user
+(define-read-only (get-user-contribution-percentage (user principal))
+  (let ((user-contribution (default-to u0 (map-get? user-contributions user)))
+        (total (var-get total-contributed)))
+    (ok (if (> total u0)
+            (/ (* user-contribution u100) total)
+            u0)))) ;; Returns percentage as an integer
+
+;; Checks if a user is eligible to withdraw a refund
+(define-read-only (can-withdraw-refund (user principal))
+  (ok (and 
+        (< (var-get total-contributed) (var-get funding-goal)) ;; Funding goal not met
+        (> (default-to u0 (map-get? user-contributions user)) u0) ;; User contributed
+        (is-eq (var-get funding-status) u0)))) ;; Funding campaign is closed
