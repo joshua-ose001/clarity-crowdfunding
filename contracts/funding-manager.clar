@@ -247,3 +247,105 @@
         (< (var-get total-contributed) (var-get funding-goal)) ;; Funding goal not met
         (> (default-to u0 (map-get? user-contributions user)) u0) ;; User contributed
         (is-eq (var-get funding-status) u0)))) ;; Funding campaign is closed
+
+;; Check If Funding Campaign Is Active
+(define-read-only (is-funding-active)
+  (ok (is-eq (var-get funding-status) u1)))
+
+;; Get the campaign progress as a percentage of the goal
+(define-read-only (get-campaign-progress)
+  (ok (if (> (var-get funding-goal) u0)
+          (/ (* (var-get total-contributed) u100) (var-get funding-goal))
+          u0)))
+
+;; Get the funding status as a human-readable string
+(define-read-only (get-funding-status-string)
+  (ok (if (is-eq (var-get funding-status) u1) "Open" "Closed")))
+
+;; Check if a user has contributed above the minimum contribution threshold
+(define-read-only (is-user-above-minimum-contribution (user principal))
+  (ok (> (default-to u0 (map-get? user-contributions user)) (var-get minimum-contribution))))
+
+;; Check if a user has contributed the maximum possible amount.
+(define-read-only (is-user-fully-contributed (user principal))
+  (let (
+        (user-contribution (default-to u0 (map-get? user-contributions user))) ;; Fetch user's contribution
+        (remaining-capacity (- (var-get funding-goal) (var-get total-contributed))) ;; Calculate remaining capacity
+  )
+    (ok (>= user-contribution remaining-capacity)))) ;; If user contribution exceeds or meets the remaining capacity
+
+;; Get the contribution status of a user (0 = No contribution, 1 = Contributed)
+(define-read-only (get-user-status (user principal))
+  (let ((user-contribution (default-to u0 (map-get? user-contributions user))))
+    (ok (if (> user-contribution u0) u1 u0))))
+
+;; Check if the campaign is fully funded (1 = Fully funded, 0 = Not funded)
+(define-read-only (is-campaign-fully-funded)
+  (ok (if (>= (var-get total-contributed) (var-get funding-goal)) u1 u0)))
+
+;; Check if a user has exceeded their contribution limit
+(define-read-only (has-user-exceeded-contribution-limit (user principal))
+  (let ((user-contribution (default-to u0 (map-get? user-contributions user))))
+    (ok (> user-contribution (var-get funding-goal)))))
+
+;; Get the campaign status in human-readable format
+(define-read-only (get-campaign-status)
+  (ok (if (is-eq (var-get funding-status) u1)
+          "Open"
+          "Closed")))
+
+;; Get the total remaining contribution capacity before reaching the funding goal
+(define-read-only (get-remaining-contribution-capacity)
+  (let ((remaining-capacity (if (> (var-get total-contributed) (var-get funding-goal))
+                               u0
+                               (- (var-get funding-goal) (var-get total-contributed)))))
+    (ok remaining-capacity)))
+
+;; Get Remaining Funding Goal: Returns the remaining amount to reach the funding goal in microstacks.
+(define-read-only (get-remaining-funding-goal)
+  (ok (- (var-get funding-goal) (var-get total-contributed))))
+
+;; Get Funding Status Description
+(define-read-only (get-funding-status-description)
+  (ok (if (is-eq (var-get funding-status) u1)
+          "Funding Open"
+          "Funding Closed")))
+
+;; Check if the campaign is open for contributions
+(define-read-only (is-campaign-open)
+  (ok (is-eq (var-get funding-status) u1)))
+
+;; Get the current funding status (0 = Closed, 1 = Open)
+(define-read-only (get-current-funding-status)
+  (ok (var-get funding-status)))
+
+;; Get the remaining contribution capacity for a user
+(define-read-only (get-user-remaining-capacity (user principal))
+  (let (
+        (current-contribution (default-to u0 (map-get? user-contributions user)))
+        (remaining-capacity (if (> (var-get total-contributed) (var-get funding-goal))
+                                u0
+                                (- (var-get funding-goal) (var-get total-contributed)))))
+    (ok (if (>= remaining-capacity current-contribution)
+            (- remaining-capacity current-contribution)
+            u0))))
+
+;; Calculate how much a user's contribution will impact the remaining funding goal
+(define-read-only (get-user-contribution-impact (user principal) (amount uint))
+  (let ((user-contribution (default-to u0 (map-get? user-contributions user))))
+    (ok (if (<= (+ (var-get total-contributed) amount) (var-get funding-goal))
+            (- (var-get funding-goal) (+ (var-get total-contributed) amount))
+            u0))))
+
+;; Get the current progress towards the funding goal as a ratio
+(define-read-only (get-funding-goal-progress)
+  (let ((goal (var-get funding-goal))
+        (contributed (var-get total-contributed)))
+    (ok (if (> goal u0)
+            (/ (* contributed u100) goal) ;; Return progress as percentage
+            u0))))
+
+;; Get Contribution Status of a User
+(define-read-only (get-user-contribution-status (user principal))
+  (let ((user-contribution (default-to u0 (map-get? user-contributions user))))
+    (ok (if (> user-contribution u0) "Contributed" "No Contribution"))))
